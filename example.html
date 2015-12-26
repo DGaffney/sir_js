@@ -1,0 +1,528 @@
+<!doctype html>
+<html>
+<head>
+  <title>Network | Basic usage</title>
+  <link href="http://fonts.googleapis.com/css?family=Noto+Sans:300,400,700" rel="stylesheet" type="text/css">
+   <link href="http://fonts.googleapis.com/css?family=Noto+Serif:400,700,400italic" rel="stylesheet" type="text/css">
+   <link href="http://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css" rel="stylesheet">
+   <link href="http://devingaffney.com/assets/css/style.css?v=1877476657" rel="stylesheet" type="text/css">
+   <link href="http://devingaffney.com/assets/css/animate.min.css?v=1877476657" rel="stylesheet" type="text/css">
+   <link href="http://devingaffney.com/assets/css/prism.css?v=1877476657" rel="stylesheet" type="text/css">
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.11.0/vis.min.js"></script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.0.0-alpha1/jquery.min.js"></script>
+
+  <link href="http://visjs.org/dist/vis.css" rel="stylesheet" type="text/css" />
+
+  <style type="text/css">
+    #mynetwork {
+      width: 600px;
+      height: 400px;
+      border: 1px solid lightgray;
+    }
+		#control{
+			width: 600px;
+		}
+		.radios > span
+		{
+		    white-space: nowrap;
+		}
+		.post-template #main, .page-template #main{
+			padding: 0;
+		}
+/*		input[type="radio"] {
+		   display: none;
+		}
+
+		input[type="radio"] + div {
+		   height: 20px;
+		   width: 20px;
+		   display: inline-block;
+		   cursor: pointer;
+		   vertical-align: middle;
+		   background: #FFF;
+		   border: 1px solid #d2d2d2;
+		   border-radius: 100%;
+		}*/
+		
+  </style>
+</head>
+<body class="post-template">
+	<section class="post-content">
+		<main id="main" class="content">
+			<form id="control">
+			</form>
+			<p style="width:600px"><span style="padding-right:20px;">Total Infected: <span id="infection_result">0</span>/100</span>
+				<span style="padding-right:20px;">T-Step: <span id="t_step">0</span></span>
+				<span >Rolling R0: <span id="r_zero">0</span></span>
+			</p>
+		</main>
+	</section>
+<script type="text/javascript">
+var QueryString = function () {
+  // This function is anonymous, is executed immediately and 
+  // the return value is assigned to QueryString!
+  var query_string = {};
+  var query = window.location.search.substring(1);
+  var vars = query.split("&");
+  for (var i=0;i<vars.length;i++) {
+    var pair = vars[i].split("=");
+        // If first entry with this name
+    if (typeof query_string[pair[0]] === "undefined") {
+      query_string[pair[0]] = decodeURIComponent(pair[1]);
+        // If second entry with this name
+    } else if (typeof query_string[pair[0]] === "string") {
+      var arr = [ query_string[pair[0]],decodeURIComponent(pair[1]) ];
+      query_string[pair[0]] = arr;
+        // If third or later entry with this name
+    } else {
+      query_string[pair[0]].push(decodeURIComponent(pair[1]));
+    }
+  } 
+    return query_string;
+}();
+if (QueryString.guided == "true"){
+	$('#control').append('<input id="model_type" type="hidden" value="'+QueryString.model_type+'"><input type="hidden" name="number_seeds" value="'+QueryString.number_seeds+'" id="number_seeds"><input type="hidden" name="beta" value="'+QueryString.beta_simple+'" id="beta_simple"><input type="hidden" name="mu" value="'+QueryString.mu_simple+'" id="mu_simple"><input  type="hidden" name="beta" value="'+QueryString.beta_complex+'" id="beta_complex"><input  type="hidden" name="mu" value="'+QueryString.mu_complex+'" id="mu_complex"><div style="float:none;padding-bottom:30px;"><div style="float:left;" width="120px"><input type="submit" value="Setup Model" onclick="run()" id="run_model" disabled></div><div style="float:right;margin-left:-400px" width="120px"><input type="submit" value="New Network and Seed" onclick="newNet(initial)" id="new_net" disabled></div></div><div id="mynetwork" style="margin-top:10px;"></div>')
+} else {
+	$('#control').append('<div class="radios" width="600px;">	<nobr>		<span >Contagion type:</span>		<input id="model_type" type="hidden" value="simple">		<span id="simple_link">Simple</span> | <span id="complex_link"><a href="#" onclick="flipMenu(\'complex\')">Complex</a></span>	</nobr></div><div id="seeds">	How many initial infected:<input style="position:absolute;margin-top:5px;width:80px;height:24px" type="text" name="number_seeds" value="1" id="number_seeds"><br/></div><div id="simple">	How likely you\'ll share when you see it: <input style="position:absolute;margin-top:5px;width:80px;height:24px" type="text" name="beta" value="0.5" id="beta_simple"><br/>	How quickly until people stop caring (0-1): <input style="position:absolute;margin-top:5px;width:80px;height:24px" type="text" name="mu" value="0.3" id="mu_simple"><br/></div><div id="complex">	Percent of friends infected for you to get infected: <input  style="position:absolute;margin-top:5px;width:80px;height:24px" type="text" name="beta" value="0.5" id="beta_complex"><br/>	How quickly until people stop caring (0-1): <input  style="position:absolute;margin-top:5px;width:80px;height:24px" type="text" name="mu" value="0.3" id="mu_complex"><br/></div><div style="float:none;padding-bottom:30px;"><div style="float:left;" width="120px">	<input type="submit" value="Setup Model" onclick="run()" id="run_model" disabled></div><div style="float:right;margin-left:-400px" width="120px">	<input type="submit" value="New Network and Seed" onclick="newNet(initial)" id="new_net" disabled></div></div><div id="mynetwork" style="margin-top:10px;"></div>')
+	document.getElementById("complex").style.display = "none";
+}
+
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+function flipMenu(clicked_val){
+	var other_val
+	if(clicked_val == "simple"){
+		other_val = "complex"
+	} else {
+		other_val = "simple"
+	}
+	document.getElementById('model_type').value = clicked_val
+	document.getElementById(other_val+"_link").innerHTML = "<a href=\"#\" onclick=\"flipMenu('"+other_val+"')\">"+capitalizeFirstLetter(other_val)+"</a>"
+	document.getElementById(clicked_val+"_link").innerHTML = capitalizeFirstLetter(clicked_val)
+	document.getElementById(clicked_val).style.display = "block";
+	document.getElementById(other_val).style.display = "none";
+}
+var charCodeOfA = "A".charCodeAt(0),
+    alphabetLength = "Z".charCodeAt(0) - charCodeOfA + 1;
+
+function numberToLetters(nNum) {
+    if (nNum <= alphabetLength) {
+        return convertNumberToLetter(nNum);
+    } else {
+        var firstNumber = Math.floor((nNum - 1) / alphabetLength);
+        var firstLetter = convertNumberToLetter(firstNumber);
+
+        var secondNumber = (nNum % alphabetLength) || alphabetLength;
+        var secondLetter = convertNumberToLetter(secondNumber);
+
+        return firstLetter + secondLetter;
+    }
+}
+
+function convertNumberToLetter(nNum) {
+    var charCode = charCodeOfA + nNum - 1;
+    return String.fromCharCode(charCode);
+}
+function shuffle(o){
+    for(var j, x, i = o.length; i; j = Math.floor(Math.random() * i), x = o[--i], o[i] = o[j], o[j] = x);
+    return o;
+}
+function gammaDecay(node_count, mink, maxk, power){
+	set = []
+	for (var i = 0; i < node_count; i++){
+		first = (Math.pow(maxk, power+1)-Math.pow(mink, power+1))
+		second = Math.pow(mink, power+1)
+		third = (first * Math.random()+second)
+		fourth = Math.round(Math.pow(third, (1/(power+1))))
+		set.push(fourth)
+	}
+	return set
+}
+function generateSmallWorld(node_count, maxk, power, mink, label_start_i){
+	var nodes = []
+	var edges = []
+  degree_dist = gammaDecay(node_count, mink, maxk, power)
+	node_labels = []
+	for(var i = 0; i < node_count; i++){
+		node_labels.push(numberToLetters(i+1+label_start_i))
+	}
+	edge_matched = {}
+  for (var i = 0; i < node_labels.length; i++) {
+		nodes.push({id: node_labels[i], label: node_labels[i]})
+		if (edge_matched[i] == null){
+			edge_matched[i] = []
+		}
+	}
+  for (var i = 0; i < degree_dist.length; i++) {
+		degree = degree_dist[i]
+		for (var j = 0; j < degree; j++) {
+			alter = Math.round(Math.random()*(degree_dist.length-1))
+			while (alter == i || (edge_matched[i].indexOf(alter) != -1 || edge_matched[alter].indexOf(i) != -1)) {
+				alter = Math.round(Math.random()*(degree_dist.length-1))
+			}
+			edge_matched[i].push(alter)
+			edges.push({from: nodes[i].id, to: nodes[alter].id})
+		}
+  }
+	return {nodes: nodes, edges: edges}
+}
+function generateNet(node_count, maxk, power, mink, net_type){
+	var edgeset = []
+	var nodeset = []
+	if (net_type=="basic"){
+		net = generateSmallWorld(node_count, maxk, power, mink, 0)
+		edgeset = net.edges
+		nodeset = net.nodes
+	} else if (net_type == "barbell"){
+		net1 = generateSmallWorld(node_count/2, maxk/2, power, mink, 0)
+		net2 = generateSmallWorld(node_count/2, maxk/2, power, mink, node_count/2)
+		for (var i = 0; i < 3; i++){
+			first = Math.round(Math.random()*net1.nodes.length)
+			second = Math.round(Math.random()*net2.nodes.length)
+			while (net1.nodes[first] == null || net2.nodes[second] == null){
+				first = Math.round(Math.random()*net1.nodes.length)
+				second = Math.round(Math.random()*net2.nodes.length)				
+			}
+			edgeset.push({from: net1.nodes[first].id, to: net2.nodes[second].id})
+		}
+		for (var i = 0; i < net1.nodes.length; i++){
+			nodeset.push(net1.nodes[i])
+		}
+		for (var i = 0; i < net2.nodes.length; i++){
+			nodeset.push(net2.nodes[i])
+		}
+		for (var i = 0; i < net1.edges.length; i++){
+			edgeset.push(net1.edges[i])
+		}
+		for (var i = 0; i < net2.edges.length; i++){
+			edgeset.push(net2.edges[i])
+		}
+	}
+  // create a network
+  var container = document.getElementById('mynetwork');
+  var data = {
+    nodes: new vis.DataSet(nodeset),
+    edges: new vis.DataSet(edgeset)
+  };
+	var options = {}
+	statuses = {}
+	for (var i = 0; i < node_count; i++){
+		statuses[numberToLetters(i+1)] = 'susceptible'
+	}
+	var next_statuses = jQuery.extend(true, {}, statuses);
+	return {container: container, dataset: new vis.DataSet(data, options), net: new vis.Network(container, data, options), options: options, statuses: statuses, next_statuses: next_statuses, nodes: data.nodes, edges: data.edges}
+}
+function neighbors(node_id, edgeset){
+	neighbor_set = []
+	for (var i = 0; i < edgeset.length; i++){
+		if (node_id == edgeset[i].from){
+			neighbor_set.push(edgeset[i].to)
+		}
+		if (node_id == edgeset[i].to){
+			neighbor_set.push(edgeset[i].from)
+		}
+	}
+	return neighbor_set
+}
+
+function updateNode(node_id, state, initial){
+	if (state == "infected" && initial.net.findNode(node_id)[0] != null){
+		initial.net.findNode(node_id)[0].setOptions({color: 'red'})
+		initial.next_statuses[node_id] = "infected"
+		initial.net.redraw()		
+	} else if (state == "recovered" && initial.net.findNode(node_id)[0] != null) {
+		initial.net.findNode(node_id)[0].setOptions({color: 'green'})
+		initial.next_statuses[node_id] = "recovered"
+		initial.net.redraw()		
+	}
+}
+function neighbors(node_id, initial){
+	neighbor_ids = []
+	for (var i = 0; i < initial.net.findNode(node_id)[0].edges.length; i++){
+		if (initial.net.findNode(node_id)[0].edges[i].fromId != node_id){
+			neighbor_ids.push(initial.net.findNode(node_id)[0].edges[i].fromId)
+		} else {
+			neighbor_ids.push(initial.net.findNode(node_id)[0].edges[i].toId)
+		}
+	}
+	return neighbor_ids
+}
+function get_statuses(node_ids, initial){
+	statuses = []
+	for (var i = 0; i < node_ids.length; i++){
+		statuses.push(initial.statuses[node_ids[i]])
+	}
+	return statuses
+}
+function count_state(states, state){
+	count = 0
+	for (var i = 0; i < states.length; i++){
+		if (states[i] == state){
+			count += 1
+		}
+	}
+	return count
+}
+function reset_graph(initial){
+	current_states = []
+	for (var key in initial.statuses) {
+	    current_states.push(initial.statuses[key]);
+	}
+	for (var i = 0; i < current_states.length; i++){
+		initial.net.findNode(numberToLetters(i+1))[0].setOptions({color: '#97c2fc'})
+		initial.statuses[numberToLetters(i+1)] = "susceptible"
+	}
+	initial.net.redraw()
+}
+function average_from_array(arr){
+	sum = 0
+	for (var i = 0; i < arr.length; i++){
+		sum += arr[i]
+	}
+	return sum/arr.length
+}
+function average_r_zero(new_infection_counts){
+	r_zeros = []
+	for (var i = 1; i < new_infection_counts.length; i++){
+		if (new_infection_counts[i-1] != 0) {
+			r_zeros.push(new_infection_counts[i]/new_infection_counts[i-1])
+		}
+	}
+	return average_from_array(r_zeros)
+}
+function runSIRSimple(initial, beta, mu, seeds){
+	reset_graph(initial)
+	current_states = []
+	for (var key in initial.statuses) {
+	    current_states.push(initial.statuses[key]);
+	}
+	all_states = [current_states]
+	new_infection_counts = [seed_count]
+	for (var i = 0; i < seeds.length; i++){
+		updateNode(numberToLetters(seeds[i]+1), "infected", initial)
+	}
+	initial.statuses = initial.next_statuses
+	var tmp_statuses = jQuery.extend(true, {}, initial.next_statuses);
+	initial.statuses = tmp_statuses
+	t = 0
+	function finish_model(step, all_states){
+		if (count_state(all_states[all_states.length-1], "infected") == 0){
+			clearInterval(step);
+			document.getElementById("run_model").disabled = false;
+			document.getElementById("new_net").disabled = false;
+		}
+	}
+	t = 0
+	step = setInterval(function(){
+		t += 1
+		step_result = runSIRSimpleStep(initial, beta, mu, step, all_states, new_infection_counts)
+		all_states.push(step_result.states)
+		new_infection_counts.push(step_result.new_infected)
+		finish_model(step, all_states)
+		document.getElementById("t_step").innerHTML = t
+	}, 250);
+}
+function runSIRSimpleStep(initial, beta, mu){
+	current_states = []
+	this_infected = 0
+	for (var key in initial.statuses) {
+	    current_states.push(initial.statuses[key]);
+	}
+	for (var i = 0; i < current_states.length; i++){
+		if (initial.statuses[numberToLetters(i+1)] == 'susceptible'){
+			neighbor_set = neighbors(numberToLetters(i+1), initial)
+			infected_neighbor_count = count_state(get_statuses(neighbor_set, initial), "infected")
+			if (Math.random() < (1-Math.pow((1-beta), infected_neighbor_count))){
+				updateNode(numberToLetters(i+1), "infected", initial)
+				this_infected += 1
+			}
+		} else if (initial.statuses[numberToLetters(i+1)] == 'infected'){
+			if (Math.random() < mu){
+				updateNode(numberToLetters(i+1), "recovered", initial)
+			}
+		}		
+		current_states = []
+		for (var key in initial.statuses) {
+		    current_states.push(initial.statuses[key]);
+		}
+	}
+	initial.statuses = initial.next_statuses
+	var tmp_statuses = jQuery.extend(true, {}, initial.next_statuses);
+	initial.statuses = tmp_statuses
+	new_infected = new_infection_counts
+	new_infected.push(this_infected)
+	document.getElementById("infection_result").innerHTML = (Math.round(count_state(current_states, "infected")+count_state(current_states, "recovered"))*100)/100
+	console.log(new_infected)
+	document.getElementById("r_zero").innerHTML = Math.round(average_r_zero(new_infected)*100)/100
+	return {states: current_states, new_infected: this_infected}
+}
+function runSIRComplex(initial, beta, mu, seeds){
+	reset_graph(initial)
+	current_states = []
+	for (var key in initial.statuses) {
+	    current_states.push(initial.statuses[key]);
+	}
+	all_states = [current_states]
+	new_infection_counts = [seed_count]
+	for (var i = 0; i < seeds.length; i++){
+		updateNode(numberToLetters(seeds[i]+1), "infected", initial)
+	}
+	initial.statuses = initial.next_statuses
+	var tmp_statuses = jQuery.extend(true, {}, initial.next_statuses);
+	initial.statuses = tmp_statuses
+	t = 0
+	function finish_model(step, all_states){
+		if (count_state(all_states[all_states.length-1], "infected") == 0){
+			clearInterval(step);
+			document.getElementById("run_model").disabled = false;
+			document.getElementById("new_net").disabled = false;
+		}
+	}
+	t = 0
+	step = setInterval(function(){ 
+		all_states.push(runSIRComplexStep(initial, beta, mu, step, all_states))
+		finish_model(step, all_states)
+		document.getElementById("t_step").innerHTML = t
+		t += 1
+	}, 250);
+}
+function runSIRComplexStep(initial, beta, mu){
+	current_states = []
+	for (var key in initial.statuses) {
+	    current_states.push(initial.statuses[key]);
+	}
+	for (var i = 0; i < current_states.length; i++){
+		if (initial.statuses[numberToLetters(i+1)] == 'susceptible'){
+			neighbor_set = neighbors(numberToLetters(i+1), initial)
+			infected_neighbor_count = count_state(get_statuses(neighbor_set, initial), "infected")
+			if (infected_neighbor_count/neighbor_set.length > beta || neighbor_set.length == infected_neighbor_count){
+				updateNode(numberToLetters(i+1), "infected", initial)
+			}
+		} else if (initial.statuses[numberToLetters(i+1)] == 'infected'){
+			if (Math.random() < mu){
+				updateNode(numberToLetters(i+1), "recovered", initial)
+			}
+		}		
+		current_states = []
+		for (var key in initial.statuses) {
+		    current_states.push(initial.statuses[key]);
+		}
+	}
+	initial.statuses = initial.next_statuses
+	document.getElementById("infection_result").innerHTML = count_state(current_states, "infected")+count_state(current_states, "recovered")
+	return current_states
+	finish_model(step, all_states)
+}
+function run(){
+	document.getElementById("run_model").disabled = true;
+	document.getElementById("new_net").disabled = true;	
+	console.log(initial.statuses)
+	initial.statuses = {}
+	for (var i = 0; i < node_count; i++){
+		initial.statuses[numberToLetters(i+1)] = 'susceptible'
+		initial.next_statuses[numberToLetters(i+1)] = 'susceptible'
+	}
+	console.log(initial.statuses)
+	seed_count = parseInt(document.getElementById("number_seeds").value)
+	if (seed_count < 1){
+		seed_count = 1
+		document.getElementById("number_seeds").value = seed_count
+	}
+	if (seed_count > 100){
+		seed_count = 100
+		document.getElementById("number_seeds").value = seed_count
+	}
+	if (seeds.length != seed_count){
+		seeds = []
+		while (seeds.length < seed_count){
+			seed = Math.round(Math.random()*100)
+			while (seeds.indexOf(seed) != -1){
+				seed = Math.round(Math.random()*100)
+			}
+			seeds.push(seed)
+		}		
+	}
+	model_type = document.getElementById('model_type').value;
+	if (model_type == "simple"){
+		beta = parseFloat(document.getElementById("beta_simple").value)
+		if (beta < 0.001){
+			beta = 0.001
+			document.getElementById("beta_simple").value = beta
+		}
+		if (beta > 10){
+			beta = 10
+			document.getElementById("beta_simple").value = beta
+		}
+		mu = parseFloat(document.getElementById("mu_simple").value)
+		if (mu < 0.001){
+			mu = 0.001
+			document.getElementById("mu_simple").value = mu
+		}
+		if (mu > 0.9){
+			mu = 0.9
+			document.getElementById("mu_simple").value = mu
+		}
+		runSIRSimple(initial, beta, mu, seeds)
+	} else {
+		beta = parseFloat(document.getElementById("beta_complex").value)
+		if (beta < 0.001){
+			beta = 0.001
+			document.getElementById("beta_complex").value = beta
+		}
+		if (beta > 10){
+			beta = 10
+			document.getElementById("beta_complex").value = beta
+		}
+		mu = parseFloat(document.getElementById("mu_complex").value)
+		if (mu < 0.001){
+			mu = 0.001
+			document.getElementById("mu_complex").value = mu
+		}
+		if (mu > 0.9){
+			mu = 0.9
+			document.getElementById("mu_complex").value = mu
+		}
+		runSIRComplex(initial, beta, mu, seeds)
+	}
+}
+node_count = 100
+maxk = node_count/2
+power = -2.5
+mink = 1
+seed_count = parseInt(document.getElementById("number_seeds").value)
+initial = generateNet(node_count, maxk, power, mink, QueryString.model)
+seeds = []
+while (seeds.length < seed_count){
+	seed = Math.round(Math.random()*100)
+	while (seeds.indexOf(seed) != -1){
+		seed = Math.round(Math.random()*100)
+	}
+	seeds.push(seed)
+}
+initial.net.on("stabilized", function (ctx) {
+	document.getElementById("run_model").disabled = false;
+	document.getElementById("new_net").disabled = false;	
+});
+function newNet(initial){
+	document.getElementById("run_model").disabled = true;
+	document.getElementById("new_net").disabled = true;	
+	initial = generateNet(node_count, maxk, power, mink, QueryString.model)
+	seeds = []
+	while (seeds.length < seed_count){
+		seed = Math.round(Math.random()*100)
+		while (seeds.indexOf(seed) != -1){
+			seed = Math.round(Math.random()*100)
+		}
+		seeds.push(seed)
+	}
+	initial.net.on("afterDrawing", function (ctx) {
+		document.getElementById("run_model").disabled = false;
+		document.getElementById("new_net").disabled = false;	
+	});
+}
+</script>
+
+</body>
+</html>
